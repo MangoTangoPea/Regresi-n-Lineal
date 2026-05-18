@@ -167,14 +167,26 @@ class RegresionApp(tk.Tk):
         )
         self.txt_paste.pack(fill="both", padx=8, pady=(0, 8))
 
+        btn_frame = tk.Frame(paste_card, bg=BG_CARD)
+        btn_frame.pack(fill="x", padx=8, pady=(0, 10))
+
         btn_parse = tk.Button(
-            paste_card, text="⬆  Cargar datos pegados",
+            btn_frame, text="⬆  Cargar datos",
             bg=ACCENT, fg="white", activebackground="#8078ff",
             font=("Segoe UI", 10, "bold"), relief="flat",
             cursor="hand2", command=self._load_from_paste, bd=0,
             padx=12, pady=7,
         )
-        btn_parse.pack(fill="x", padx=8, pady=(0, 10))
+        btn_parse.pack(side="left", expand=True, fill="x", padx=(0, 4))
+
+        btn_clear = tk.Button(
+            btn_frame, text="🗑  Limpiar",
+            bg=BG_INPUT, fg=TEXT_PRIMARY, activebackground=BORDER,
+            font=("Segoe UI", 10, "bold"), relief="flat",
+            cursor="hand2", command=self._clear_paste, bd=0,
+            padx=12, pady=7,
+        )
+        btn_clear.pack(side="right", expand=True, fill="x", padx=(4, 0))
 
         # Tarjeta: cargar archivo
         self._section_label(left, "2  Cargar archivo Excel / CSV")
@@ -249,6 +261,16 @@ class RegresionApp(tk.Tk):
         )
         self.combo_legend.current(0)
         self.combo_legend.pack(fill="x", padx=10, pady=(0, 6))
+
+        tk.Label(cust_card, text="Tamaño Leyenda (pts):",
+                 bg=BG_CARD, fg=TEXT_MUTED,
+                 font=("Segoe UI", 9)).pack(anchor="w", padx=10, pady=(4, 2))
+        self.combo_legend_size = ttk.Combobox(
+            cust_card, state="readonly", font=("Segoe UI", 10),
+            values=["8", "9", "10", "11", "12", "14", "16", "18", "20", "24"]
+        )
+        self.combo_legend_size.current(3) # Default 11
+        self.combo_legend_size.pack(fill="x", padx=10, pady=(0, 6))
 
         color_frame = tk.Frame(cust_card, bg=BG_CARD)
         color_frame.pack(fill="x", padx=10, pady=(4, 10))
@@ -349,6 +371,9 @@ class RegresionApp(tk.Tk):
         self.toolbar = None
 
     # ── Carga de datos ────────────────────────────────────────────────────────
+    def _clear_paste(self):
+        self.txt_paste.delete("1.0", "end")
+
     def _load_from_paste(self):
         raw = self.txt_paste.get("1.0", "end").strip()
         if not raw:
@@ -515,7 +540,12 @@ class RegresionApp(tk.Tk):
         }
         loc_str = legend_locs.get(self.combo_legend.get(), "best")
         
-        leg = ax.legend(handles, labels, loc=loc_str, fontsize=11, framealpha=0.9, edgecolor="black")
+        try:
+            leg_size = int(self.combo_legend_size.get())
+        except Exception:
+            leg_size = 11
+        
+        leg = ax.legend(handles, labels, loc=loc_str, fontsize=leg_size, framealpha=0.9, edgecolor="black")
         leg.set_draggable(True)
 
         fig.tight_layout()
@@ -582,14 +612,25 @@ class RegresionApp(tk.Tk):
                 label = "Regresión cúbica"
 
             elif reg_type == "Exponencial":
-                if np.any(y <= 0):
-                    raise ValueError("Y <= 0")
-                log_y = np.log(y)
+                is_negative = False
+                if np.all(y < 0):
+                    is_negative = True
+                    y_calc = -y
+                elif np.any(y <= 0):
+                    raise ValueError("Y contiene valores <= 0 mezclados (o ceros).")
+                else:
+                    y_calc = y
+
+                log_y = np.log(y_calc)
                 slope, intercept, r_val, _, _ = stats.linregress(x, log_y)
                 r = r_val
                 r2 = r_val**2
                 a = np.exp(intercept)
                 b = slope
+
+                if is_negative:
+                    a = -a
+
                 y_fit = a * np.exp(b * x_fit)
                 formula_str = f"y = {a:.4f} * e^({b:.4f}x)"
                 latex_str = f"$y = {a:.4f} \\cdot e^{{{b:.4f}x}}$"
