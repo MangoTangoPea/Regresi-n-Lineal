@@ -1,7 +1,4 @@
 """
-Ejercicio 4: Diagrama de Dispersión y Regresión Lineal
-Curso: Algoritmia y Programación 2026-1
-
 Permite pegar datos de Excel o cargar un archivo .xlsx/.csv,
 genera el diagrama de dispersión y calcula la regresión lineal
 mostrando la fórmula y el valor R².
@@ -97,9 +94,7 @@ class RegresionApp(tk.Tk):
         tk.Label(header, text="📊  Diagrama de Dispersión & Regresión",
                  bg=BG_DARK, fg=TEXT_PRIMARY,
                  font=("Segoe UI", 18, "bold")).pack(side="left")
-        tk.Label(header, text="Algoritmia y Programación 2026-1",
-                 bg=BG_DARK, fg=TEXT_MUTED,
-                 font=("Segoe UI", 10)).pack(side="right", padx=4)
+       
 
         # Panel principal (dos columnas)
         main = tk.Frame(self, bg=BG_DARK)
