@@ -39,6 +39,7 @@ class RegresionApp(tk.Tk):
 
         self.color_puntos = ACCENT
         self.color_linea = ACCENT2
+        self._prev_reg = "Automática (Mejor ajuste)"
 
         self._setup_styles()
         self._build_ui()
@@ -228,10 +229,23 @@ class RegresionApp(tk.Tk):
         self.combo_reg = ttk.Combobox(
             col_card, state="readonly", font=("Segoe UI", 10),
             values=["Automática (Mejor ajuste)", "Lineal", "Cuadrática (polinómica grado 2)",
-                    "Cúbica (polinómica grado 3)", "Exponencial", "Logarítmica"],
+                    "Cúbica (polinómica grado 3)", "Exponencial", "Logarítmica", "Ninguna (Solo datos)"],
         )
         self.combo_reg.current(0)
-        self.combo_reg.pack(fill="x", padx=10, pady=(0, 10))
+        self.combo_reg.pack(fill="x", padx=10, pady=(0, 6))
+        self.combo_reg.bind("<<ComboboxSelected>>", self._on_reg_changed)
+
+        # Opción para solo mostrar datos (sin regresión)
+        self.var_solo_datos = tk.BooleanVar(value=False)
+        self.chk_solo_datos = tk.Checkbutton(
+            col_card, text="Solo mostrar datos (sin regresión)",
+            variable=self.var_solo_datos,
+            bg=BG_CARD, fg=TEXT_PRIMARY, selectcolor=BG_INPUT,
+            activebackground=BG_CARD, activeforeground=TEXT_PRIMARY,
+            font=("Segoe UI", 9), cursor="hand2",
+            command=self._on_toggle_solo_datos
+        )
+        self.chk_solo_datos.pack(anchor="w", padx=10, pady=(0, 10))
 
         # Tarjeta: personalización
         self._section_label(left, "4  Personalización")
@@ -285,14 +299,14 @@ class RegresionApp(tk.Tk):
         self.btn_color_lin.pack(side="right", expand=True, fill="x", padx=(4, 0))
 
         # Botón generar
-        btn_gen = tk.Button(
+        self.btn_gen = tk.Button(
             left, text="✨  Generar Diagrama & Regresión",
             bg=ACCENT2, fg="white", activebackground="#ff8aa0",
             font=("Segoe UI", 11, "bold"), relief="flat",
             cursor="hand2", command=self._generate, bd=0,
             padx=12, pady=10,
         )
-        btn_gen.pack(fill="x", pady=(4, 0))
+        self.btn_gen.pack(fill="x", pady=(4, 0))
 
         # Resultados estadísticos
         self._section_label(left, "Resultados")
@@ -329,6 +343,32 @@ class RegresionApp(tk.Tk):
                  bg=BG_DARK, fg=TEXT_MUTED,
                  font=("Segoe UI", 8, "bold")).pack(anchor="w", pady=(10, 2))
 
+    def _on_toggle_solo_datos(self):
+        if self.var_solo_datos.get():
+            curr = self.combo_reg.get()
+            if curr != "Ninguna (Solo datos)":
+                self._prev_reg = curr
+            self.combo_reg.set("Ninguna (Solo datos)")
+            self.btn_color_lin.config(state="disabled")
+            self.btn_gen.config(text="✨  Generar Diagrama de Dispersión")
+        else:
+            prev = getattr(self, "_prev_reg", "Automática (Mejor ajuste)")
+            if prev == "Ninguna (Solo datos)":
+                prev = "Automática (Mejor ajuste)"
+            self.combo_reg.set(prev)
+            self.btn_color_lin.config(state="normal")
+            self.btn_gen.config(text="✨  Generar Diagrama & Regresión")
+
+    def _on_reg_changed(self, event=None):
+        if self.combo_reg.get() == "Ninguna (Solo datos)":
+            self.var_solo_datos.set(True)
+            self.btn_color_lin.config(state="disabled")
+            self.btn_gen.config(text="✨  Generar Diagrama de Dispersión")
+        else:
+            self.var_solo_datos.set(False)
+            self.btn_color_lin.config(state="normal")
+            self.btn_gen.config(text="✨  Generar Diagrama & Regresión")
+
     def _choose_color_pts(self):
         color = colorchooser.askcolor(title="Elegir color de puntos", color=self.color_puntos)[1]
         if color:
@@ -336,6 +376,8 @@ class RegresionApp(tk.Tk):
             self.btn_color_pts.config(bg=color)
 
     def _choose_color_lin(self):
+        if self.var_solo_datos.get() or self.combo_reg.get() == "Ninguna (Solo datos)":
+            return
         color = colorchooser.askcolor(title="Elegir color de línea", color=self.color_linea)[1]
         if color:
             self.color_linea = color
@@ -456,9 +498,10 @@ class RegresionApp(tk.Tk):
             return
 
         reg_type = self.combo_reg.get()
-        self._plot(x, y, col_x, col_y, reg_type)
+        solo_datos = self.var_solo_datos.get() or (reg_type == "Ninguna (Solo datos)")
+        self._plot(x, y, col_x, col_y, reg_type, solo_datos=solo_datos)
 
-    def _plot(self, x, y, label_x, label_y, reg_type):
+    def _plot(self, x, y, label_x, label_y, reg_type, solo_datos=False):
         # ── Matplotlib white style for reports ─────────────────────────────
         plt.rcParams.update({
             "figure.facecolor": "white",
@@ -479,29 +522,30 @@ class RegresionApp(tk.Tk):
         ax.scatter(x, y, color=self.color_puntos, edgecolors="black",
                    linewidths=0.6, s=70, zorder=3, alpha=0.85, label="Datos")
 
-        # ── Calcular regresión ─────────────────────────────────────────────
-        x_fit = np.linspace(x.min(), x.max(), 300)
-        
-        if reg_type == "Automática (Mejor ajuste)":
-            best_r2 = -1.0
-            best_data = None
-            for t in ["Lineal", "Cuadrática (polinómica grado 2)", "Cúbica (polinómica grado 3)", "Exponencial", "Logarítmica"]:
-                data = self._get_regression_data(x, y, x_fit, t)
-                if data[2] > best_r2:
-                    best_r2 = data[2]
-                    best_data = data
-            if best_data is None or best_data[0] is None:
-                messagebox.showerror("Error", "No se pudo calcular ninguna regresión.")
-                return
-            formula_str, latex_str, r2, r, y_fit, label, color = best_data
-            label += " (Mejor automática)"
-        else:
-            formula_str, latex_str, r2, r, y_fit, label, color = self._get_regression_data(x, y, x_fit, reg_type)
-            if formula_str is None:
-                messagebox.showerror("Error", f"No se pudo calcular la regresión {reg_type}. Revisa que los datos sean válidos (ej. no valores <= 0 para log/exp).")
-                return
+        if not solo_datos:
+            # ── Calcular regresión ─────────────────────────────────────────────
+            x_fit = np.linspace(x.min(), x.max(), 300)
+            
+            if reg_type == "Automática (Mejor ajuste)":
+                best_r2 = -1.0
+                best_data = None
+                for t in ["Lineal", "Cuadrática (polinómica grado 2)", "Cúbica (polinómica grado 3)", "Exponencial", "Logarítmica"]:
+                    data = self._get_regression_data(x, y, x_fit, t)
+                    if data[2] > best_r2:
+                        best_r2 = data[2]
+                        best_data = data
+                if best_data is None or best_data[0] is None:
+                    messagebox.showerror("Error", "No se pudo calcular ninguna regresión.")
+                    return
+                formula_str, latex_str, r2, r, y_fit, label, color = best_data
+                label += " (Mejor automática)"
+            else:
+                formula_str, latex_str, r2, r, y_fit, label, color = self._get_regression_data(x, y, x_fit, reg_type)
+                if formula_str is None:
+                    messagebox.showerror("Error", f"No se pudo calcular la regresión {reg_type}. Revisa que los datos sean válidos (ej. no valores <= 0 para log/exp).")
+                    return
 
-        ax.plot(x_fit, y_fit, color=self.color_linea, lw=2.5, label=label)
+            ax.plot(x_fit, y_fit, color=self.color_linea, lw=2.5, label=label)
 
         # Anotaciones en la gráfica
         ax.set_xlabel(label_x, fontsize=11)
@@ -514,15 +558,15 @@ class RegresionApp(tk.Tk):
         
         ax.grid(True, linestyle="--", alpha=0.4)
 
-        # Incorporar la fórmula y R² a la leyenda para que matplotlib use loc="best"
-        # y ubique la caja en el lugar más despejado, evitando chocar con la línea o los puntos.
-        import matplotlib.patches as mpatches
-        text_content = f"{latex_str}\n$R^2 = {r2:.4f}$"
-        dummy_patch = mpatches.Rectangle((0,0), 1, 1, fill=False, edgecolor='none', visible=False)
-        
         handles, labels = ax.get_legend_handles_labels()
-        handles.append(dummy_patch)
-        labels.append(text_content)
+        if not solo_datos:
+            # Incorporar la fórmula y R² a la leyenda para que matplotlib use loc="best"
+            # y ubique la caja en el lugar más despejado, evitando chocar con la línea o los puntos.
+            import matplotlib.patches as mpatches
+            text_content = f"{latex_str}\n$R^2 = {r2:.4f}$"
+            dummy_patch = mpatches.Rectangle((0,0), 1, 1, fill=False, edgecolor='none', visible=False)
+            handles.append(dummy_patch)
+            labels.append(text_content)
         
         legend_locs = {
             "Automático (Mejor)": "best",
@@ -564,10 +608,16 @@ class RegresionApp(tk.Tk):
         self.toolbar = toolbar
 
         # ── Actualizar panel de resultados ─────────────────────────────────
-        self.lbl_formula.config(text=f"f(x) = {formula_str.split('= ', 1)[-1]}")
-        self.lbl_r2.config(text=f"R²  =  {r2:.6f}")
-        self.lbl_r.config(text=f"r    =  {r:.6f}")
-        self.lbl_interp.config(text=_interpret_r2(r2))
+        if solo_datos:
+            self.lbl_formula.config(text="Modo: Solo datos (sin regresión)")
+            self.lbl_r2.config(text=f"Total puntos: N = {len(x)}")
+            self.lbl_r.config(text=f"Media X: {np.mean(x):.4f} | Media Y: {np.mean(y):.4f}")
+            self.lbl_interp.config(text="Visualizando únicamente los puntos de datos sin ajuste de modelo o regresión.")
+        else:
+            self.lbl_formula.config(text=f"f(x) = {formula_str.split('= ', 1)[-1]}")
+            self.lbl_r2.config(text=f"R²  =  {r2:.6f}")
+            self.lbl_r.config(text=f"r    =  {r:.6f}")
+            self.lbl_interp.config(text=_interpret_r2(r2))
 
     def _get_regression_data(self, x, y, x_fit, reg_type):
         formula_str, latex_str, r2, r = "", "", -1.0, 0.0
