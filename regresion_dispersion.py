@@ -11,7 +11,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from scipy import stats
 import io
 
 
@@ -562,9 +561,8 @@ class RegresionApp(tk.Tk):
         if not solo_datos:
             # Incorporar la fórmula y R² a la leyenda para que matplotlib use loc="best"
             # y ubique la caja en el lugar más despejado, evitando chocar con la línea o los puntos.
-            import matplotlib.patches as mpatches
             text_content = f"{latex_str}\n$R^2 = {r2:.4f}$"
-            dummy_patch = mpatches.Rectangle((0,0), 1, 1, fill=False, edgecolor='none', visible=False)
+            dummy_patch = mpatches.Rectangle((0, 0), 1, 1, fill=False, edgecolor='none', visible=False)
             handles.append(dummy_patch)
             labels.append(text_content)
         
@@ -627,7 +625,7 @@ class RegresionApp(tk.Tk):
         
         try:
             if reg_type == "Lineal":
-                slope, intercept, r_val, p_val, std_err = stats.linregress(x, y)
+                slope, intercept, r_val = _linregress(x, y)
                 r, r2 = r_val, r_val**2
                 y_fit = slope * x_fit + intercept
                 sign = "+" if intercept >= 0 else "-"
@@ -639,7 +637,7 @@ class RegresionApp(tk.Tk):
             elif "Cuadrática" in reg_type:
                 coeffs = np.polyfit(x, y, 2)
                 r2 = _poly_r2(x, y, coeffs)
-                r = r2**0.5
+                r = (r2**0.5) if r2 > 0 else 0.0
                 y_fit = np.polyval(coeffs, x_fit)
                 formula_str = _poly_str(coeffs, degree=2)
                 latex_str = f"${formula_str}$"
@@ -649,7 +647,7 @@ class RegresionApp(tk.Tk):
             elif "Cúbica" in reg_type:
                 coeffs = np.polyfit(x, y, 3)
                 r2 = _poly_r2(x, y, coeffs)
-                r = r2**0.5
+                r = (r2**0.5) if r2 > 0 else 0.0
                 y_fit = np.polyval(coeffs, x_fit)
                 formula_str = _poly_str(coeffs, degree=3)
                 latex_str = f"${formula_str}$"
@@ -667,7 +665,7 @@ class RegresionApp(tk.Tk):
                     y_calc = y
 
                 log_y = np.log(y_calc)
-                slope, intercept, r_val, _, _ = stats.linregress(x, log_y)
+                slope, intercept, r_val = _linregress(x, log_y)
                 r = r_val
                 r2 = r_val**2
                 a = np.exp(intercept)
@@ -686,7 +684,7 @@ class RegresionApp(tk.Tk):
                 if np.any(x <= 0):
                     raise ValueError("X <= 0")
                 log_x = np.log(x)
-                slope, intercept, r_val, _, _ = stats.linregress(log_x, y)
+                slope, intercept, r_val = _linregress(log_x, y)
                 r = r_val
                 r2 = r_val**2
                 y_fit = slope * np.log(x_fit)  + intercept
@@ -702,6 +700,24 @@ class RegresionApp(tk.Tk):
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+def _linregress(x, y):
+    """
+    Calcula regresión lineal por mínimos cuadrados (pendiente, intercepto, r)
+    usando únicamente NumPy de manera ultraliviana y eficiente.
+    """
+    x_mean = np.mean(x)
+    y_mean = np.mean(y)
+    dx = x - x_mean
+    dy = y - y_mean
+    ss_x = np.sum(dx * dx)
+    ss_y = np.sum(dy * dy)
+    ss_xy = np.sum(dx * dy)
+    if ss_x <= 0 or ss_y <= 0:
+        return 0.0, float(y_mean), 0.0
+    slope = ss_xy / ss_x
+    intercept = y_mean - slope * x_mean
+    r = ss_xy / np.sqrt(ss_x * ss_y)
+    return slope, intercept, r
 def _poly_r2(x, y, coeffs):
     y_pred = np.polyval(coeffs, x)
     ss_res = np.sum((y - y_pred) ** 2)
